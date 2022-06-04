@@ -1,0 +1,482 @@
+---
+title: "routine"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r}
+spectra <- read.csv("/home/igonzalez/MAUCA/METEOR 5/data2/spectra.csv")
+drop <- c("name","number")
+spectra = spectra[,!(names(spectra) %in% drop)]
+print(spectra)
+```
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+cond_vis=(!is.na(spectra[,5]) & !is.na(spectra[,15]) & is.na(spectra[,35]) & is.na(spectra[,52]))
+vis <- filter(spectra,cond_vis==TRUE)
+cond_nir=(is.na(spectra[,5]) & !is.na(spectra[,34]) & !is.na(spectra[,47]))
+nir <- filter(spectra,cond_nir==TRUE)
+cond_visnir=(!is.na(spectra[,5]) & !is.na(spectra[,21]) & !is.na(spectra[,34]) & !is.na(spectra[,51]))
+visnir <- filter(spectra,cond_visnir==TRUE)
+```
+```{r}
+ind_nir <- which(cond_nir)
+ind_vis <- which(cond_vis)
+ind_visnir <- which(cond_visnir)
+intersect(ind_visnir,ind_nir)
+```
+```{r}
+ind_all <- c(ind_vis,ind_nir,ind_visnir)
+spectra_unclass <- spectra[-ind_all,]
+head(spectra_unclass)
+```
+
+```{r}
+vec_vis = 1:20
+vec_nir = 21:53
+sum_vis <- apply(is.na(spectra_unclass[,vec_vis]),1,sum)
+sum_nir <- apply(is.na(spectra_unclass[,vec_nir]),1,sum)
+for (i in 1:nrow(spectra_unclass)){
+  if (sum_vis[i]==20){
+    nir <- rbind(nir,spectra_unclass[i,])
+  }else if (sum_nir[i]==32){
+    vis <- rbind(vis,spectra_unclass[i,])
+  }else{
+    visnir <- rbind(visnir,spectra_unclass[i,])
+  }
+}
+```
+
+
+```{r}
+print(vis)
+print(nir)
+print(visnir)
+```
+```{r}
+for (i in 1:ncol(vis)){
+  vis[,i] <- vis[,i]/vis[,5]
+  visnir[,i] <- visnir[,i]/visnir[,5]
+  nir[,i] <- nir[,i]/nir[,26]
+}
+```
+```{r}
+print(visnir)
+```
+
+```{r}
+spectra_new <- bind_rows(vis,nir,visnir)
+print(spectra_new)
+```
+
+```{r}
+library(ggplot2)
+wave=c(0.45,0.475,0.5,0.525,0.55,0.575,0.6,0.625,0.65,0.675,0.7,0.725,0.75,0.775,0.8,0.825,0.85,0.875,0.9,0.925,0.95,0.975,1.0,1.025,1.05,1.1,1.15,
+1.2,1.25,1.3,1.35,1.4,1.45,1.5,1.55,1.6,1.65,1.7,1.75,1.8,1.85,1.9,1.95, 2.0,2.05,2.1,2.15,2.2,2.25,2.3,2.35,2.4,2.45)
+
+ind <- 1:nrow(vis)#sample(1:nrow(spectra),2,replace=FALSE)
+l_vis <- rep(wave,nrow(vis[ind,]))
+df_vis=data.frame(l_vis)
+names(df_vis) = "Wavelength"
+df_vis["Reflectance"]=as.vector(t(data.matrix(vis[ind,])))
+df_vis["variable"]=as.factor(as.vector(sapply(1:nrow(vis[ind,]),rep,ncol(vis[ind,]))))
+ggplot(df_vis, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(na.rm=TRUE,alpha=3/10) + theme(legend.position="none")
+```
+```{r}
+ind <- 1:nrow(nir)
+l_nir <- rep(wave,nrow(nir[ind,]))
+df_nir=data.frame(l_nir)
+names(df_nir) = "Wavelength"
+df_nir["Reflectance"]=as.vector(t(data.matrix(nir[ind,])))
+df_nir["variable"]=as.factor(as.vector(sapply(1:nrow(nir[ind,]),rep,ncol(nir[ind,]))))
+ggplot(df_nir, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(na.rm=TRUE,alpha=3/10) + theme(legend.position="none")
+```
+```{r}
+ind <- 1:nrow(visnir)
+l_visnir <- rep(wave,nrow(visnir[ind,]))
+df_visnir=data.frame(l_visnir)
+names(df_visnir) = "Wavelength"
+df_visnir["Reflectance"]=as.vector(t(data.matrix(visnir[ind,])))
+df_visnir["variable"]=as.factor(as.vector(sapply(1:nrow(visnir[ind,]),rep,ncol(visnir[ind,]))))
+ggplot(df_visnir, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(na.rm=TRUE,alpha=3/10) + theme(legend.position="none")
+```
+Add legend: x axis micrometers, y axis relative reflectance (to 0.55 microns or 1.1 microns)
+
+```{r}
+drop2 <- c("X0.55","X1.1")
+spectra_new = spectra_new[,!(names(spectra_new) %in% drop2)]
+print(spectra_new)
+```
+```{r}
+for (j in 1:ncol(spectra_new)){
+  spectra_new[,j] <- (spectra_new[,j]-mean(spectra_new[,j],na.rm=TRUE))/sd(spectra_new[,j],na.rm=TRUE)
+}
+print(spectra_new)
+```
+
+```{r}
+#PCA plot
+library(FactoMineR)
+library(missMDA)
+nb <- estim_ncpPCA(spectra_new,method.cv = "Kfold", verbose = FALSE,nbsim=1)
+nb$ncp
+```
+```{r}
+plot(0:5, nb$criterion, xlab = "nb dim", ylab = "MSEP")
+```
+
+```{r}
+res.comp <- imputePCA(spectra, ncp = 5)
+res.pca <- PCA(res.comp$completeObs)
+plot(res.pca,choix="ind",habillage=13)
+```
+
+
+```{r}
+#NA imputation with SoftImpute
+
+library(softImpute)
+library(devtools)
+source_url('https://raw.githubusercontent.com/R-miss-tastic/website/master/static/how-to/impute/CrossValidation_softImpute.R', sha1="32a052b71698d62131b646bc92bbbe2fd53aa476")
+## SHA-1 hash of file is a392b353c3ba88ecd276c2d94bd36009d5d40616
+
+spectra_matrix <- data.matrix(spectra_new)
+lambda_sft <- cv_sft(spectra_matrix)
+sft <- softImpute(x = spectra_matrix, lambda = lambda_sft)
+X.sft <- sft$u %*% diag(sft$d) %*% t(sft$v)
+X.sft[which(!is.na(spectra_matrix))] <- spectra_matrix[which(!is.na(spectra_matrix))]
+#head(X.sft)
+```
+
+
+```{r}
+#To check if there are any NA left 
+sum(is.na(X.sft))
+```
+```{r}
+#NA imputation with mice: not working because 2 variables strongly correlated
+#library(mice)
+#mice_mice <- mice(data = spectra_matrix, m = 5, method = "pmm")
+#IMP <- 0
+#for (i in 1:5) { IMP <- IMP + mice::complete(mice_mice, i)}
+#X.mice  <-  IMP/5  #5 is the default number of multiple imputations
+#head(X.mice)
+```
+```{r}
+sum(is.na(X.mice))
+```
+```{r}
+library(missForest)
+registerDoParallel(cores=3)
+s_forest <- missForest(spectra_matrix,ntree=100,parallelize = "forests")
+X.forest <- forest$ximp
+#head(X.forest)
+```
+
+
+```{r}
+sum(is.na(X.forest))
+```
+Mean imputation
+
+```{r}
+X.mean <- imputeMean(spectra_matrix)
+sum(is.na(X.mean))
+```
+```{r}
+library(missMDA)
+spectra_matrix <- data.matrix(spectra_new)
+xpca <-imputePCA(X=spectra_matrix,ncp=5,scale=TRUE,method='EM')
+X.xpca <- xpca$completeObs
+```
+```{r}
+X.xpca
+```
+```{r}
+ind <- 1:nrow(vis_new)
+wave <- c(0.45,0.475,0.5,0.525,0.575,0.6,0.625,0.65,0.675,0.7,0.725,0.75,0.775,0.8,0.825,0.85,0.875,0.9,0.925,0.95,0.975,1.0,1.025,1.05,1.15,
+1.2,1.25,1.3,1.35,1.4,1.45,1.5,1.55,1.6,1.65,1.7,1.75,1.8,1.85,1.9,1.95, 2.0,2.05,2.1,2.15,2.2,2.25,2.3,2.35,2.4,2.45)
+
+vec_change <- rep(wave,nrow(X.xpca[ind,]))
+df=data.frame(vec_change)
+names(df) = "Wavelength"
+df["Reflectance"]=as.vector(t(data.matrix(X.xpca[ind,])))
+df["variable"]=as.factor(as.vector(sapply(1:nrow(X.xpca[ind,]),rep,ncol(X.xpca[ind,]))))
+ggplot(df, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(alpha=3/10) + theme(legend.position="none")
+```
+```{r}
+nir_new = nir[,!(names(nir) %in% drop2)]
+vis_new = vis[,!(names(vis) %in% drop2)]
+for (j in 1:ncol(vis_new )){
+  vis_new[,j] <- (vis_new [,j]-mean(vis_new [,j],na.rm=TRUE))/sd(vis_new [,j],na.rm=TRUE)
+}
+print(vis_new)
+for (j in 1:ncol(nir_new)){
+  nir_new[,j] <- (nir_new[,j]-mean(nir_new[,j],na.rm=TRUE))/sd(nir_new[,j],na.rm=TRUE)
+}
+print(nir_new)
+```
+
+```{r}
+ind <- 1:nrow(vis_new)
+wave <- c(0.45,0.475,0.5,0.525,0.575,0.6,0.625,0.65,0.675,0.7,0.725,0.75,0.775,0.8,0.825,0.85,0.875,0.9,0.925,0.95,0.975,1.0,1.025,1.05,1.15,
+1.2,1.25,1.3,1.35,1.4,1.45,1.5,1.55,1.6,1.65,1.7,1.75,1.8,1.85,1.9,1.95, 2.0,2.05,2.1,2.15,2.2,2.25,2.3,2.35,2.4,2.45)
+
+vec_change <- rep(wave,nrow(vis_new[ind,]))
+df=data.frame(vec_change)
+names(df) = "Wavelength"
+df["Reflectance"]=as.vector(t(data.matrix(vis_new[ind,])))
+df["variable"]=as.factor(as.vector(sapply(1:nrow(vis_new[ind,]),rep,ncol(vis_new[ind,]))))
+ggplot(df, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(na.rm=TRUE,alpha=3/10) + theme(legend.position="none")
+```
+```{r}
+ind <- 1:nrow(nir_new)
+wave <- c(0.45,0.475,0.5,0.525,0.575,0.6,0.625,0.65,0.675,0.7,0.725,0.75,0.775,0.8,0.825,0.85,0.875,0.9,0.925,0.95,0.975,1.0,1.025,1.05,1.15,
+1.2,1.25,1.3,1.35,1.4,1.45,1.5,1.55,1.6,1.65,1.7,1.75,1.8,1.85,1.9,1.95, 2.0,2.05,2.1,2.15,2.2,2.25,2.3,2.35,2.4,2.45)
+l_nir <- rep(wave,nrow(nir_new[ind,]))
+df_nir=data.frame(l_nir)
+names(df_nir) = "Wavelength"
+df_nir["Reflectance"]=as.vector(t(data.matrix(nir_new[ind,])))
+df_nir["variable"]=as.factor(as.vector(sapply(1:nrow(nir_new[ind,]),rep,ncol(nir_new[ind,]))))
+ggplot(df_nir, aes(x=Wavelength, y=Reflectance, colour = variable)) + geom_line(na.rm=TRUE,alpha=3/10) + theme(legend.position="none")
+```
+
+
+
+
+
+
+Creation of synthetic data: we take the sample of fully observed rows in the normalised spectra_new dataset.
+
+```{r}
+vec_spectra <- 1:ncol(spectra_new)
+sumna_spectra <- apply(is.na(spectra_new[,vec_spectra]),1,sum)
+spectra_test <- data.frame(matrix(ncol = 51, nrow = 0))
+for (i in 1:nrow(spectra_new)){
+  if (sumna_spectra[i]==0){
+    spectra_test <- rbind(spectra_test,spectra_new[i,])
+  }
+}
+print(spectra_test)
+```
+
+
+
+```{r}
+library(devtools)
+nir_new = nir[,!(names(nir) %in% drop2)]
+vis_new = vis[,!(names(vis) %in% drop2)]
+pattern_vis <- 1*is.na(vis_new[1:20,])
+pattern_nir <- 1*is.na(nir_new[50:70,])
+
+visnir.miss <- produce_NA(spectra_test[1:256,], mechanism="MCAR", perc.missing = 0.2)
+vis.miss <- produce_NA(spectra_test[257:512,],mechanism='MCAR',perc.missing=0.8)
+nir.miss <- ampute(spectra_test[513:770,],patterns=1-pattern_nir[1:2,],freq=c(0.5,0.5),mech='MCAR',prop=0.8)
+```
+
+```{r}
+vis.mcar <- vis.miss$data.incomp
+nir.mcar <- nir.miss$amp
+visnir.mcar <- visnir.miss$data.incomp
+print(vis.mcar)
+print(nir.mcar)
+#print(visnir.mcar)
+```
+
+
+```{r}
+spectra_synth <- bind_rows(vis.mcar,nir.mcar,visnir.mcar)
+print(spectra_synth)
+```
+```{r}
+X_NA <- data.frame(matrix(ncol = 51, nrow = 0))
+for (i in 1:nrow(spectra_new)){
+  X_NA[i,] <- replace(spectra_new[i,],sumna_spectra[i]==0,spectra_synth[i,])
+  X_NA[i,] <- rbind.data.frame(spectra_synth,spectra_new[-which(sumna_spectra==0)])
+}
+print(X_NA)
+```
+```{r}
+X_NA<- rbind.data.frame(spectra_synth,spectra_new[-which(sumna_spectra==0),])
+print(X_NA)
+```
+
+
+
+```{r}
+synth_matrix <- data.matrix(X_NA)
+lambda_s_sft <- cv_sft(synth_matrix)
+s_sft <- softImpute(x = synth_matrix, lambda = lambda_s_sft)
+X.s_sft <- s_sft$u %*% diag(s_sft$d) %*% t(s_sft$v)
+X.s_sft[which(!is.na(synth_matrix))] <- synth_matrix[which(!is.na(synth_matrix))]
+sum(is.na(X.s_sft))
+```
+```{r}
+s_forest <- missForest(xmis = synth_matrix, maxiter = 5, ntree = 20)
+X.s_forest<- s_forest$ximp
+sum(is.na(X.s_forest))
+```
+```{r}
+s_mice <- mice(data = synth_matrix, m = 5, method = "pmm")
+IMP <- 0
+for (i in 1:5) { IMP <- IMP + mice::complete(s_mice, i)}
+X.s_mice  <-  IMP/5 
+sum(is.na(X.s_mice))
+```
+```{r}
+X.s_mean <- imputeMean(synth_matrix)
+sum(is.na(X.s_mean))
+#print(X.s_mean)
+```
+```{r}
+#install.packages('Metrics')
+library(Metrics)
+MSE_mean <- mse(as.matrix(X.s_mean[1:770,]),as.matrix(spectra_test))
+print(MSE_mean)
+MSE_forest <- mse(as.matrix(X.s_forest[1:770,]),as.matrix(spectra_test))
+print(MSE_forest)
+MSE_soft <- mse(as.matrix(X.s_sft[1:770,]),as.matrix(spectra_test))
+print(MSE_soft)
+```
+
+```{r}
+library(devtools)
+library(Metrics)
+library(missForest)
+library(softImpute)
+library(mice)
+MSE_s <- c()
+MSE_f <- c()
+MSE_m <- c()
+for (i in 1:15){
+  vec_spectra <- 1:ncol(spectra_new)
+  sumna_spectra <- apply(is.na(spectra_new[,vec_spectra]),1,sum)
+  spectra_test <- data.frame(matrix(ncol = 51, nrow = 0))
+  for (j in 1:nrow(spectra_new)){
+    if (sumna_spectra[j]==0){
+      spectra_test <- rbind(spectra_test,spectra_new[j,])
+    }
+  }
+  nir_new = nir[,!(names(nir) %in% drop2)]
+  vis_new = vis[,!(names(vis) %in% drop2)]
+  pattern_vis <- 1*is.na(vis_new[1:20,])
+  pattern_nir <- 1*is.na(nir_new[50:70,])
+
+  visnir.miss <- produce_NA(spectra_test[1:256,], mechanism="MCAR", perc.missing = 0.2)
+  vis.miss <- ampute(spectra_test[257:512,],patterns=1-pattern_vis[1:2,],freq=c(0.5,0.5),mech='MCAR',prop=0.8)
+  nir.miss <- ampute(spectra_test[513:770,],patterns=1-pattern_nir[1:2,],freq=c(0.5,0.5),mech='MCAR',prop=0.8)
+  vis.mcar <- vis.miss$amp
+  nir.mcar <- nir.miss$amp
+  visnir.mcar <- visnir.miss$data.incomp
+  spectra_synth <- bind_rows(vis.mcar,nir.mcar,visnir.mcar)
+  X_NA <- rbind.data.frame(spectra_synth,spectra_new[-which(sumna_spectra==0),])
+  synth_matrix <- data.matrix(X_NA)
+  lambda_s_sft <- cv_sft(synth_matrix)
+  s_sft <- softImpute(x = synth_matrix, lambda = lambda_s_sft)
+  X.s_sft <- s_sft$u %*% diag(s_sft$d) %*% t(s_sft$v)
+  X.s_sft[which(!is.na(synth_matrix))] <- synth_matrix[which(!is.na(synth_matrix))]
+  s_forest <- missForest(xmis = synth_matrix, maxiter = 5, ntree = 20)
+  X.s_forest<- s_forest$ximp
+  X.s_mean <- imputeMean(synth_matrix)
+  MSE_mean <- mse(as.matrix(X.s_mean[1:770,]),as.matrix(spectra_test))
+  MSE_forest <- mse(as.matrix(X.s_forest[1:770,]),as.matrix(spectra_test))
+  MSE_soft <- mse(as.matrix(X.s_sft[1:770,]),as.matrix(spectra_test))
+  MSE_m <- append(MSE_m,MSE_mean)
+  MSE_f <- append(MSE_f,MSE_forest)
+  MSE_s <- append(MSE_s,MSE_soft)
+}
+```
+```{r}
+MSE_s
+MSE_f
+MSE_m
+```
+```{r}
+mean(MSE_s)
+mean(MSE_f)
+mean(MSE_m)
+```
+
+```{r}
+boxplot(MSE_s,MSE_f,MSE_m,ylab='Mean Square Error (MSE)')
+axis(1, at = c(1,2,3), labels = c("SoftImpute","missForest","ImputeMean"))
+```
+```{r}
+sum(is.na(spectra_new))
+```
+
+
+```{r}
+library(devtools)
+library(Metrics)
+library(missForest)
+library(softImpute)
+library(mice)
+library(missMDA)
+library(doParallel)
+MSE_s <- c()
+MSE_f <- c()
+MSE_m <- c()
+for (i in 1:10){
+  set.seed(i)
+  vec_spectra <- 1:ncol(spectra_new)
+  sumna_spectra <- apply(is.na(spectra_new[,vec_spectra]),1,sum)
+  spectra_test <- data.frame(matrix(ncol = 51, nrow = 0))
+  for (j in 1:nrow(spectra_new)){
+    if (sumna_spectra[j]==0){
+      spectra_test <- rbind(spectra_test,spectra_new[j,])
+    }
+  }
+  nir_new = nir[,!(names(nir) %in% drop2)]
+  vis_new = vis[,!(names(vis) %in% drop2)]
+  pattern_vis <- 1*is.na(vis_new[1:20,])
+  pattern_nir <- 1*is.na(nir_new[50:70,])
+
+  visnir.miss <- produce_NA(spectra_test[1:256,], mechanism="MCAR", perc.missing = 0.2)
+  vis.miss <- produce_NA(spectra_test[257:512,], mechanism="MCAR", perc.missing = 0.8)
+  nir.miss <- produce_NA(spectra_test[513:770,], mechanism="MCAR", perc.missing = 0.8)
+  vis.mcar <- vis.miss$amp
+  nir.mcar <- nir.miss$amp
+  visnir.mcar <- visnir.miss$data.incomp
+  spectra_synth <- bind_rows(vis.mcar,nir.mcar,visnir.mcar)
+  X_NA <- rbind.data.frame(spectra_synth,spectra_new[-which(sumna_spectra==0),])
+  synth_matrix <- data.matrix(X_NA)
+  xpca <-imputePCA(X=synth_matrix,ncp=5,scale=TRUE,method='EM')
+  X.s_soft <- xpca$completeObs
+  registerDoParallel(cores=3)
+  s_forest <- missForest(synth_matrix,ntree=100,parallelize = "forests")
+  X.s_forest<- s_forest$ximp
+  X.s_mean <- imputeMean(synth_matrix)
+  MSE_mean <- mse(as.matrix(X.s_mean[1:770,]),as.matrix(spectra_test))
+  MSE_forest <- mse(as.matrix(X.s_forest[1:770,]),as.matrix(spectra_test))
+  MSE_soft <- mse(as.matrix(X.s_sft[1:770,]),as.matrix(spectra_test))
+  MSE_m <- append(MSE_m,MSE_mean)
+  MSE_f <- append(MSE_f,MSE_forest)
+  MSE_s <- append(MSE_s,MSE_soft)
+}
+```
+```{r}
+
+```
+
+
+```{r}
+boxplot(MSE_s,MSE_f,MSE_m,ylab='Mean Square Error (MSE)',ylim=c(0.972,1.1))
+axis(1, at = c(1,2,3), labels = c("xpca","missForest","ImputeMean"))
+mean(MSE_s)
+mean(MSE_f)
+mean(MSE_m)
+```
+```{r}
+MSE_f
+```
+
+
